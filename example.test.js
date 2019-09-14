@@ -5,7 +5,7 @@ const email = 'foo@email.com';
 const password = '123456';
 
 // puppeteer.launch().then(async browser => {
-puppeteer.launch({headless: false}).then(async browser => {
+puppeteer.launch({headless: true}).then(async browser => {
 
   const page = await browser.newPage();
   //Begin on home page
@@ -137,15 +137,14 @@ const tests = [
     t: async (page) => {
       await page.click('#add-card');
       await page.click('#add-card');
+      await page.waitForSelector('#remove-card-button-active');
       await page.click('#remove-card-button-active');
       await page.click('#remove-card-button-active');
       await page.click('#add-card');
       await page.click('#add-card');
       // Making it messy
       const clientData = await waitForChangesToSave(page);
-      console.log(clientData.deck);
       //We allow removal after creation of a second card
-      await page.waitForSelector('#remove-card-button-active');
       const activeCardId = clientData.activeCardId;
       assert(activeCardId, 'Selected a card');
       assert(clientData.deck.cards.length === 3, 'Now there are more cards in the deck');
