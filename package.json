@@ -4,7 +4,8 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "node ./example.test.js"
+    "test": "node ./example.test.js",
+    "test-keep-open": "DO_NOT_CLOSE=true node ./example.test.js"
   },
   "author": "",
   "license": "ISC",

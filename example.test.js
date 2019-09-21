@@ -4,8 +4,10 @@ const assert = require('assert');
 const email = 'foo@email.com';
 const password = '123456';
 
+const closeWhenDone = !process.env.DO_NOT_CLOSE;
+console.log("Keep open: ", !closeWhenDone);
 // puppeteer.launch().then(async browser => {
-puppeteer.launch({headless: true}).then(async browser => {
+puppeteer.launch(closeWhenDone ? {headless: true} : {headless: false}).then(async browser => {
 
   const page = await browser.newPage();
   //Begin on home page
@@ -32,7 +34,9 @@ puppeteer.launch({headless: true}).then(async browser => {
       break;
     }
   }
-  await browser.close();
+  if (closeWhenDone) {
+    await browser.close();
+  }
 });
 
 
@@ -136,34 +140,28 @@ const tests = [
     n: "Card Creation",
     t: async (page) => {
       await page.click('#add-card');
-      await page.click('#add-card');
       await page.waitForSelector('#remove-card-button-active');
       await page.click('#remove-card-button-active');
-      await page.click('#remove-card-button-active');
-      await page.click('#add-card');
       await page.click('#add-card');
       // Making it messy
       const clientData = await waitForChangesToSave(page);
       //We allow removal after creation of a second card
       const activeCardId = clientData.activeCardId;
       assert(activeCardId, 'Selected a card');
-      assert(clientData.deck.cards.length === 3, 'Now there are more cards in the deck');
-      assert(clientData.deck.cards[2] === activeCardId, 'Updates active card to new card');
+      assert(clientData.deck.cards.length === 2, 'Now there are more cards in the deck');
+      assert(clientData.deck.cards[1] === activeCardId, 'Updates active card to new card');
       assert(clientData.deck.cards[0] !== activeCardId, 'has a distinct id');
-      assert(clientData.deck.cards[1] !== activeCardId, 'has a distinct id');
-      assert(clientData.deck.cards[1] !== clientData.deck.cards[0], 'has a distinct id');
       assert(clientData.cardBody[activeCardId], 'Created a card body');
       const serverData = await getUserServerData(page);
       assert.equal(serverData.deck[0].cards, clientData.deck.cards, 'Deck cards match up with server cards');
       const cardBodyOnServer = serverData.cardBody.find(cb => cb.id === activeCardId);
       assert.ok(cardBodyOnServer, 'cardBody matches up with server cardBody');
-      assert(serverData.cardBody.length === 3, 'Made a card body for each new card');
+      assert(serverData.cardBody.length === 2, 'Made a card body for each new card');
     },
   },
   {
     n: "Card Removal & subsequent creation",
     t: async (page) => {
-      await page.click('#remove-card-button-active');
       await page.click('#remove-card-button-active');
       let clientData = await waitForChangesToSave(page);
       //We allow removal after creation of a second card
@@ -182,6 +180,43 @@ const tests = [
       assert(clientData.deck.cards[1] === String.fromCharCode(1), 'reclaimed open ID');
       assert(clientData.deck.cards[1] === String.fromCharCode(1), 'reclaimed open ID');
       assert.equal(serverData.deck[0].cards, clientData.deck.cards, 'Deck cards match up with server cards');
+    },
+  },
+  {
+    n: "Edit cards + image",
+    t: async (page) => {
+      await page.focus('.pell-content');
+      await page.keyboard.type('Hello!');
+      await page.click('#flip-card');
+      await page.focus('.pell-content');
+      await page.keyboard.type('Sailor!');
+      const input = await page.$('#image-upload');
+      await input.uploadFile('./test-image.png');
+      let clientData = await waitForChangesToSave(page);
+      let serverData =  await getUserServerData(page);
+      let activeId = clientData.activeCardId;
+      let cardBody = serverData.cardBody.find(cb => cb.id === activeId)
+      assert(cardBody.backHasImage);
+      assert(!!cardBody.backImage);
+      assert(cardBody.back.indexOf('Sailor!') !== -1);
+      assert(cardBody.front.indexOf('Hello!') !== -1);
+      assert(!cardBody.frontHasImage);
+      assert(!cardBody.frontImage);
+      await page.click('#image-spot');
+      await page.waitForSelector('#popup-image');
+      await page.click('.popup');
+      await page.waitFor(() => !document.querySelector("#overlay"));
+      await page.click('#flip-card');
+      await page.waitForSelector('.image-spot-without-image');
+      await page.click('#flip-card');
+      await page.waitForSelector('#remove-image-from-card');
+      await page.click('#remove-image-from-card');
+      await waitForChangesToSave(page);
+      serverData = await getUserServerData(page);
+      cardBody = serverData.cardBody.find(cb => cb.id === activeId)
+      // //Removed image
+      assert(!cardBody.backHasImage);
+      assert(!cardBody.backImage);
     },
   },
 ];
