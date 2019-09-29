@@ -47,14 +47,6 @@ async function resetServerData(page) {
     await window.lc.resetServerDBState();
   });
 }
-async function getServerData(page) {
-  //Clear all DB data
-  return page.evaluate(async function() {
-    const val = await window.lc.getServerDBState();
-    console.log(val);
-    return val;
-  });
-}
 
 async function getUserServerData(page) {
   //Clear all DB data
@@ -64,12 +56,13 @@ async function getUserServerData(page) {
     return val;
   }, email);
 }
-
+let lastSeenClientData;
 async function getClientData(page) {
   //Clear all DB data
-  return page.evaluate(async function() {
+  lastSeenClientData = await page.evaluate(async function() {
     return window.lc.data;
   });
+  return lastSeenClientData;
 }
 async function waitForChangesToSave(page) {
   const checks = 5;
@@ -195,7 +188,7 @@ const tests = [
       let clientData = await waitForChangesToSave(page);
       let serverData =  await getUserServerData(page);
       let activeId = clientData.activeCardId;
-      let cardBody = serverData.cardBody.find(cb => cb.id === activeId)
+      let cardBody = serverData.cardBody.find(cb => cb.id === activeId);
       assert(cardBody.backHasImage);
       assert(!!cardBody.backImage);
       assert(cardBody.back.indexOf('Sailor!') !== -1);
@@ -217,6 +210,31 @@ const tests = [
       // //Removed image
       assert(!cardBody.backHasImage);
       assert(!cardBody.backImage);
+    },
+  },{
+    n: "Study cards",
+    t: async (page) => {
+      await page.click('#no-study-session-creation-button');
+      await page.waitForSelector('#flip-card-study');
+      await page.click('#flip-card-study');
+      await page.waitForSelector('#right-button');
+      await page.click('#right-button');
+      await waitForChangesToSave(page);
+      await page.click('#flip-card-study');
+      await page.waitForSelector('#wrong-button');
+      await page.click('#wrong-button');
+      await page.waitForSelector('#restudy-button');
+      //restudy the wrong answers
+      await page.click('#restudy-button');
+      await waitForChangesToSave(page);
+      await page.click('#flip-card-study');
+      await page.waitForSelector('#right-button');
+      await page.click('#right-button');
+      await page.waitForSelector('#finish-studying');
+      //finish study session
+      await page.click('#finish-studying');
+
+
     },
   },
 ];
