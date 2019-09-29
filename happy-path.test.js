@@ -96,6 +96,7 @@ const tests = [
       await page.type('#email', email);
       await page.type('#password', password);
       await page.type('#password-repeat', password);
+      await page.type('#display-name', 'foo');
       //Complete signup
       await page.click('#signup-button');
       await page.waitForNavigation();
@@ -233,8 +234,6 @@ const tests = [
       await page.waitForSelector('#finish-studying');
       //finish study session
       await page.click('#finish-studying');
-
-
     },
   },
 ];
