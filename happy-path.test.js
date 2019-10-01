@@ -64,6 +64,10 @@ async function getClientData(page) {
   });
   return lastSeenClientData;
 }
+async function wclick(page, selector) {
+  await page.waitForSelector(selector);
+  await page.click(selector);
+}
 async function waitForChangesToSave(page) {
   const checks = 5;
   const waitTimePerCheck = 100;
@@ -79,7 +83,6 @@ async function waitForChangesToSave(page) {
   assert(false, 'Timed out on changes');
 }
 
-
 //Tests are intended to be run in order
 const tests = [
   {
@@ -92,7 +95,7 @@ const tests = [
       //Navigate to signup page
       await page.click('#signup-button');
 
-      await page.waitForSelector('#email');
+      await page.waitForSelector('#display-name');
       await page.type('#email', email);
       await page.type('#password', password);
       await page.type('#password-repeat', password);
@@ -134,8 +137,7 @@ const tests = [
     n: "Card Creation",
     t: async (page) => {
       await page.click('#add-card');
-      await page.waitForSelector('#remove-card-button-active');
-      await page.click('#remove-card-button-active');
+      await wclick(page, '#remove-card-button-active');
       await page.click('#add-card');
       // Making it messy
       const clientData = await waitForChangesToSave(page);
@@ -212,28 +214,86 @@ const tests = [
       assert(!cardBody.backHasImage);
       assert(!cardBody.backImage);
     },
-  },{
+  }, {
     n: "Study cards",
     t: async (page) => {
       await page.click('#no-study-session-creation-button');
-      await page.waitForSelector('#flip-card-study');
-      await page.click('#flip-card-study');
-      await page.waitForSelector('#right-button');
-      await page.click('#right-button');
+      await wclick(page, '#flip-card-study');
+      await wclick(page, '#right-button');
       await waitForChangesToSave(page);
       await page.click('#flip-card-study');
-      await page.waitForSelector('#wrong-button');
-      await page.click('#wrong-button');
-      await page.waitForSelector('#restudy-button');
+      await wclick(page, '#wrong-button');
       //restudy the wrong answers
-      await page.click('#restudy-button');
+      await wclick(page, '#restudy-button');
       await waitForChangesToSave(page);
-      await page.click('#flip-card-study');
-      await page.waitForSelector('#right-button');
-      await page.click('#right-button');
-      await page.waitForSelector('#finish-studying');
+      await wclick(page, '#flip-card-study');
+      await wclick(page, '#right-button');
       //finish study session
-      await page.click('#finish-studying');
+      await wclick(page, '#finish-studying');
+    },
+  },
+    //
+  {
+    n: "Deck sharing",
+    t: async (page) => {
+      //Share deck
+      await wclick(page, '.deck-edit-button');
+      let once;
+      const dialogPromise = new Promise(resolve => {
+        page.on('dialog', async dialog => {
+          if(once) return;
+          once = true;
+          await dialog.accept();
+          resolve();
+        });
+      });
+      await wclick(page, '#share-deck-button');
+      await dialogPromise;
+      //Now sharable
+      await page.waitForSelector('#copy-sharable-link');
+    },
+  },
+  {
+    n: "Logout",
+    t: async (page) => {
+      await wclick(page, '#logout-link');
+    }
+  },
+  {
+    n: "Public deck viewable by another",
+    t: async (page) => {
+      //Create another user
+      await wclick(page, '#login-button');
+      await wclick(page, '#signup-button');
+      await page.waitForSelector('#display-name');
+      await page.type('#email', email + '1');
+      await page.type('#password', password);
+      await page.type('#password-repeat', password);
+      await page.type('#display-name', 'foo2');
+      await page.click('#signup-button');
+      //Try to view shareable link
+      const deckId = lastSeenClientData.deck.id;
+      await page.goto(`http://localhost:3000/site/me/study?deck=${deckId}&upsert=true`);
+      // On page
+      page.setDefaultTimeout(500);
+      await page.waitForSelector('#end-session-link');
+      page.setDefaultTimeout(200);
+      const data = await getClientData(page);
+      assert(data.deck.id === deckId);
+      assert(data.deck.cards.length === 2);
+      let once;
+      const dialogPromise = new Promise(resolve => {
+        page.on('dialog', async dialog => {
+          if(once) return;
+          once = true;
+          await dialog.accept();
+          resolve();
+        });
+      });
+      await page.click('#end-session-link');
+      await dialogPromise;
+      //Fix bug with study history preview!
+
     },
   },
 ];
