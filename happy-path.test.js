@@ -250,6 +250,7 @@ const tests = [
       await wclick(page, '#share-deck-button');
       await dialogPromise;
       //Now sharable
+      await waitForChangesToSave(page);
       await page.waitForSelector('#copy-sharable-link');
     },
   },
@@ -271,13 +272,12 @@ const tests = [
       await page.type('#password-repeat', password);
       await page.type('#display-name', 'foo2');
       await page.click('#signup-button');
+      await page.waitForNavigation();
       //Try to view shareable link
       const deckId = lastSeenClientData.deck.id;
       await page.goto(`http://localhost:3000/site/me/study?deck=${deckId}&upsert=true`);
       // On page
-      page.setDefaultTimeout(500);
       await page.waitForSelector('#end-session-link');
-      page.setDefaultTimeout(200);
       const data = await getClientData(page);
       assert(data.deck.id === deckId);
       assert(data.deck.cards.length === 2);
