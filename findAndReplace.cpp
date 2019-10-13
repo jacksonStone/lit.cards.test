@@ -7,6 +7,8 @@
 typedef struct {
     STRING find;
     STRING replace;
+    int findLength;
+    int replaceLength;
 } macro;
 
 //Increment MACRO_COUNT and add a new macro if you want to do more!
@@ -26,6 +28,14 @@ static int strlen(STRING str) {
         count++;
     }
     return count;
+}
+
+static void recordMacroLengths() {
+    for(int i = 0; i < MACRO_COUNT; i++) {
+        macro * m = &macros[i];
+        m->findLength = strlen(m->find);
+        m->replaceLength = strlen(m->replace);
+    }
 }
 
 static char* getFileContents(STRING fileName){
@@ -59,23 +69,29 @@ static void writeFileContents(STRING outputPath, char * contents) {
 
 int main() {
 
-
+    recordMacroLengths();
     char* contents = getFileContents("./happy-path.test.js");
     double startTime = getCurrentMicroseconds();
-    int len = strlen(contents);
     //Plenty of padding
-    char newContents[len*2];
+    int startingLength = strlen(contents);
+    int remainingContentLen = startingLength;
+    char newContents[startingLength*2];
     int contentMarker = 0;
-    int contentLen = strlen(contents);
 
     while(*contents) {
-        char current = *contents;
         int matched = 0;
+        if(*contents == ' ' || *contents == '\n' || *contents == '\t') {
+            newContents[contentMarker] = *contents;
+            contentMarker++;
+            contents++;
+            remainingContentLen--;
+            continue;
+        }
         for(int i = 0; i < MACRO_COUNT; i++) {
             macro m = macros[i];
 
-            int macroLength = strlen(m.find);
-            if (contentLen < macroLength) {
+            int macroLength = m.findLength;
+            if (remainingContentLen < macroLength) {
                 //Not enough space
                 continue;
             }
@@ -93,37 +109,35 @@ int main() {
 
             //Replace macro with text
             if (matched) {
-               int replaceLength = strlen(m.replace);
+               int replaceLength = m.replaceLength;
                for(int j = 0; j < replaceLength; j++) {
                    newContents[contentMarker + j] = m.replace[j];
                }
                contentMarker += replaceLength;
                contents += macroLength;
-               contentLen -= macroLength;
+               remainingContentLen -= macroLength;
                break;
             }
 
         }
         if (!matched) {
-                newContents[contentMarker] = contents[0];
+                newContents[contentMarker] = *contents;
                 contentMarker++;
                 contents++;
-                contentLen--;
+                remainingContentLen--;
         }
-
-
-
-
     }
 
     newContents[contentMarker] = 0;
+    double finishedTime = getCurrentMicroseconds();
 
     writeFileContents("./build/happy-path.test.js", newContents);
 
-    double finishedTime = getCurrentMicroseconds();
+
     printf("Microseconds: %5.0f\n", (finishedTime - startTime));
 
-    printf("%d\n", len);
+    printf("%d\n", startingLength);
+
 
     return 0;
 }
