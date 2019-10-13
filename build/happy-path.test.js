@@ -1,7 +1,7 @@
-/*global AP*/
-/*global APC*/
-/*global (await waitForChangesToSave(page))*/
-/*global (await getUserServerData(page))*/
+
+
+
+
 const puppeteer = require('puppeteer');
 const assert = require('assert');
 
@@ -11,27 +11,27 @@ const password = '123456';
 const closeWhenDone = !process.env.DO_NOT_CLOSE;
 console.log("Keep open: ", !closeWhenDone);
 
-//await page. === await page.
-//await wclick(page,  === await wclick(page,
-//(await waitForChangesToSave(page)); === await waitForChangesToSave(page);
-//(await getUserServerData(page)); === await getUserServerData(page);
 
-// puppeteer.launch().then(async browser => {
+
+
+
+
+
 puppeteer.launch(closeWhenDone ? {headless: true} : {headless: false}).then(async browser => {
 
   const page = await browser.newPage();
-  //Begin on home page
+  
 
-  //Keep initial load fast
+  
   page.setDefaultTimeout(1000);
 
   await page.goto('http://localhost:3000/');
-  //Page render
+  
   await page.waitForSelector('#app-header');
 
   await resetServerData(page);
-  //Second load should be much quicker
-  // page.setDefaultTimeout(200);
+  
+  
 
   for(let i = 0; i < tests.length; i++) {
     let testConfig = tests[i];
@@ -50,16 +50,16 @@ puppeteer.launch(closeWhenDone ? {headless: true} : {headless: false}).then(asyn
 });
 
 
-//Common utilities
+
 async function resetServerData(page) {
-  //Clear all DB data
+  
   await page.evaluate(async ()=>{
     await window.lc.resetServerDBState();
   });
 }
 
 async function getUserServerData(page) {
-  //Clear all DB data
+  
   return page.evaluate(async function(userId) {
     const val = await window.lc.getServerDBState(userId);
     console.log(val);
@@ -68,7 +68,7 @@ async function getUserServerData(page) {
 }
 let lastSeenClientData;
 async function getClientData(page) {
-  //Clear all DB data
+  
   lastSeenClientData = await page.evaluate(async function() {
     return window.lc.data;
   });
@@ -106,16 +106,16 @@ async function clickAndWaitOnDialog(page, id) {
   await dialogPromise;
 }
 
-//Tests are intended to be run in order
+
 const tests = [
   {
     n: "Signup Flow",
     t: async (page) => {
-      //Begin on login page
+      
       await page.goto('http://localhost:3000/site/login');
-      //Page render
+      
       await page.waitForSelector('#email');
-      //Navigate to signup page
+      
       await page.click('#signup-button');
 
       await page.waitForSelector('#display-name');
@@ -123,7 +123,7 @@ const tests = [
       await page.type('#password', password);
       await page.type('#password-repeat', password);
       await page.type('#display-name', 'foo');
-      //Complete signup
+      
       await page.click('#signup-button');
       await page.waitForNavigation();
       assert(page.url() === 'http://localhost:3000/site/me', 'failed to navigate to home');
@@ -145,7 +145,7 @@ const tests = [
     n: "Deck Creation",
     t: async (page) => {
       await page.click('#add-deck-card');
-      //We do not allow card removal for the only card
+      
       await page.waitForSelector('#remove-card-button-inactive');
       const clientData = (await waitForChangesToSave(page));
       const activeCardId = clientData.activeCardId;
@@ -162,9 +162,9 @@ const tests = [
       await page.click('#add-card');
       await wclick(page, '#remove-card-button-active');
       await page.click('#add-card');
-      // Making it messy
+      
       const clientData = (await waitForChangesToSave(page));
-      //We allow removal after creation of a second card
+      
       const activeCardId = clientData.activeCardId;
       assert(activeCardId, 'Selected a card');
       assert(clientData.deck.cards.length === 2, 'Now there are more cards in the deck');
@@ -183,7 +183,7 @@ const tests = [
     t: async (page) => {
       await page.click('#remove-card-button-active');
       let clientData = (await waitForChangesToSave(page));
-      //We allow removal after creation of a second card
+      
       const activeCardId = clientData.activeCardId;
       assert(activeCardId, 'Selected a card');
       assert(clientData.deck.cards.length === 1, 'Now there are less cards in the deck');
@@ -233,7 +233,7 @@ const tests = [
       (await waitForChangesToSave(page));
       serverData = (await getUserServerData(page));
       cardBody = serverData.cardBody.find(cb => cb.id === activeId)
-      // //Removed image
+      
       assert(!cardBody.backHasImage);
       assert(!cardBody.backImage);
     },
@@ -246,23 +246,23 @@ const tests = [
       (await waitForChangesToSave(page));
       await page.click('#flip-card-study');
       await wclick(page, '#wrong-button');
-      //restudy the wrong answers
+      
       await wclick(page, '#restudy-button');
       (await waitForChangesToSave(page));
       await wclick(page, '#flip-card-study');
       await wclick(page, '#right-button');
-      //finish study session
+      
       await wclick(page, '#finish-studying');
     },
   },
-    //
+    
   {
     n: "Deck sharing",
     t: async (page) => {
-      //Share deck
+      
       await wclick(page, '.deck-edit-button');
       await clickAndWaitOnDialog(page, '#share-deck-button');
-      //Now sharable
+      
       (await waitForChangesToSave(page));
       await page.waitForSelector('#copy-sharable-link');
     },
@@ -276,7 +276,7 @@ const tests = [
   {
     n: "Public deck viewable by another",
     t: async (page) => {
-      //Create another user
+      
       await wclick(page, '#login-button');
       await wclick(page, '#signup-button');
       await page.waitForSelector('#display-name');
@@ -286,16 +286,16 @@ const tests = [
       await page.type('#display-name', 'foo2');
       await page.click('#signup-button');
       await page.waitForNavigation();
-      //Try to view shareable link
+      
       const deckId = lastSeenClientData.deck.id;
       await page.goto(`http://localhost:3000/site/me/study?deck=${deckId}&upsert=true`);
-      // On page
+      
       await page.waitForSelector('#end-session-link');
       const data = await getClientData(page);
       assert(data.deck.id === deckId);
       assert(data.deck.cards.length === 2);
       await clickAndWaitOnDialog(page, '#end-session-link');
-      //Fix bug with study history preview!
+      
 
     },
   },

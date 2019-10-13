@@ -12,6 +12,7 @@ typedef struct {
 } macro;
 
 //Increment MACRO_COUNT and add a new macro if you want to do more!
+// 12 microseconds per macro per 1000 chars
 #define MACRO_COUNT 4
 static macro macros[MACRO_COUNT] = {
     {"AP.", "await page."},
@@ -68,23 +69,38 @@ static void writeFileContents(STRING outputPath, char * contents) {
 }
 
 int main() {
+    double startTime = getCurrentMicroseconds();
 
     recordMacroLengths();
     char* contents = getFileContents("./happy-path.test.js");
-    double startTime = getCurrentMicroseconds();
     //Plenty of padding
     int startingLength = strlen(contents);
     int remainingContentLen = startingLength;
     char newContents[startingLength*2];
     int contentMarker = 0;
-
+    int onFirstChar = 1;
     while(*contents) {
         int matched = 0;
-        if(*contents == ' ' || *contents == '\n' || *contents == '\t') {
+        if(*contents == '\n') {
+            onFirstChar = 1;
             newContents[contentMarker] = *contents;
             contentMarker++;
             contents++;
             remainingContentLen--;
+            continue;
+        }
+        if(*contents == ' ' || *contents == '\t') {
+            newContents[contentMarker] = *contents;
+            contentMarker++;
+            contents++;
+            remainingContentLen--;
+            continue;
+        }
+        if(onFirstChar && *contents == '/' && (*(contents+1) == '/' || *(contents+1) == '*')) {
+            while(*contents != '\n' && *contents) {
+               contents++;
+               remainingContentLen--;
+            }
             continue;
         }
         for(int i = 0; i < MACRO_COUNT; i++) {
@@ -116,11 +132,13 @@ int main() {
                contentMarker += replaceLength;
                contents += macroLength;
                remainingContentLen -= macroLength;
+               onFirstChar = 0;
                break;
             }
 
         }
         if (!matched) {
+                onFirstChar = 0;
                 newContents[contentMarker] = *contents;
                 contentMarker++;
                 contents++;
@@ -129,10 +147,9 @@ int main() {
     }
 
     newContents[contentMarker] = 0;
-    double finishedTime = getCurrentMicroseconds();
 
     writeFileContents("./build/happy-path.test.js", newContents);
-
+    double finishedTime = getCurrentMicroseconds();
 
     printf("Microseconds: %5.0f\n", (finishedTime - startTime));
 
