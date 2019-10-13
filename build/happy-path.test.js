@@ -1,7 +1,7 @@
 /*global AP*/
 /*global APC*/
-/*global wait_for_save*/
-/*global server_data*/
+/*global (await waitForChangesToSave(page))*/
+/*global (await getUserServerData(page))*/
 const puppeteer = require('puppeteer');
 const assert = require('assert');
 
@@ -11,10 +11,10 @@ const password = '123456';
 const closeWhenDone = !process.env.DO_NOT_CLOSE;
 console.log("Keep open: ", !closeWhenDone);
 
-//AP. === await page.
-//APC( === await wclick(page,
-//wait_for_save; === await waitForChangesToSave(page);
-//server_data; === await getUserServerData(page);
+//await page. === await page.
+//await wclick(page,  === await wclick(page,
+//(await waitForChangesToSave(page)); === await waitForChangesToSave(page);
+//(await getUserServerData(page)); === await getUserServerData(page);
 
 // puppeteer.launch().then(async browser => {
 puppeteer.launch(closeWhenDone ? {headless: true} : {headless: false}).then(async browser => {
@@ -25,9 +25,9 @@ puppeteer.launch(closeWhenDone ? {headless: true} : {headless: false}).then(asyn
   //Keep initial load fast
   page.setDefaultTimeout(1000);
 
-  AP.goto('http://localhost:3000/');
+  await page.goto('http://localhost:3000/');
   //Page render
-  AP.waitForSelector('#app-header');
+  await page.waitForSelector('#app-header');
 
   await resetServerData(page);
   //Second load should be much quicker
@@ -53,7 +53,7 @@ puppeteer.launch(closeWhenDone ? {headless: true} : {headless: false}).then(asyn
 //Common utilities
 async function resetServerData(page) {
   //Clear all DB data
-  AP.evaluate(async ()=>{
+  await page.evaluate(async ()=>{
     await window.lc.resetServerDBState();
   });
 }
@@ -69,14 +69,14 @@ async function getUserServerData(page) {
 let lastSeenClientData;
 async function getClientData(page) {
   //Clear all DB data
-  lastSeenClientData = AP.evaluate(async function() {
+  lastSeenClientData = await page.evaluate(async function() {
     return window.lc.data;
   });
   return lastSeenClientData;
 }
 async function wclick(page, selector) {
-  AP.waitForSelector(selector);
-  AP.click(selector);
+  await page.waitForSelector(selector);
+  await page.click(selector);
 }
 async function waitForChangesToSave(page) {
   const checks = 5;
@@ -102,7 +102,7 @@ async function clickAndWaitOnDialog(page, id) {
       resolve();
     });
   });
-  APC(id);
+  await wclick(page, id);
   await dialogPromise;
 }
 
@@ -112,42 +112,42 @@ const tests = [
     n: "Signup Flow",
     t: async (page) => {
       //Begin on login page
-      AP.goto('http://localhost:3000/site/login');
+      await page.goto('http://localhost:3000/site/login');
       //Page render
-      AP.waitForSelector('#email');
+      await page.waitForSelector('#email');
       //Navigate to signup page
-      AP.click('#signup-button');
+      await page.click('#signup-button');
 
-      AP.waitForSelector('#display-name');
-      AP.type('#email', email);
-      AP.type('#password', password);
-      AP.type('#password-repeat', password);
-      AP.type('#display-name', 'foo');
+      await page.waitForSelector('#display-name');
+      await page.type('#email', email);
+      await page.type('#password', password);
+      await page.type('#password-repeat', password);
+      await page.type('#display-name', 'foo');
       //Complete signup
-      AP.click('#signup-button');
-      AP.waitForNavigation();
+      await page.click('#signup-button');
+      await page.waitForNavigation();
       assert(page.url() === 'http://localhost:3000/site/me', 'failed to navigate to home');
     }
   },
   {
     n: "Authenticate Email",
     t: async (page) => {
-      AP.waitForSelector('#email-verification-bar');
-      const data = server_data;
+      await page.waitForSelector('#email-verification-bar');
+      const data = (await getUserServerData(page));
       const emailBody = data.emails[0].text;
       const url = emailBody.substring(emailBody.indexOf('http:'));
-      AP.goto(url);
-      AP.waitForSelector('#email-verified');
+      await page.goto(url);
+      await page.waitForSelector('#email-verified');
       assert(true, 'Verified email as expected');
     },
   },
   {
     n: "Deck Creation",
     t: async (page) => {
-      AP.click('#add-deck-card');
+      await page.click('#add-deck-card');
       //We do not allow card removal for the only card
-      AP.waitForSelector('#remove-card-button-inactive');
-      const clientData = wait_for_save;
+      await page.waitForSelector('#remove-card-button-inactive');
+      const clientData = (await waitForChangesToSave(page));
       const activeCardId = clientData.activeCardId;
       assert(activeCardId, 'Selected a card');
       assert(clientData.deck.cards.length === 1, 'is the only card in the deck');
@@ -159,11 +159,11 @@ const tests = [
   {
     n: "Card Creation",
     t: async (page) => {
-      AP.click('#add-card');
-      APC('#remove-card-button-active');
-      AP.click('#add-card');
+      await page.click('#add-card');
+      await wclick(page, '#remove-card-button-active');
+      await page.click('#add-card');
       // Making it messy
-      const clientData = wait_for_save;
+      const clientData = (await waitForChangesToSave(page));
       //We allow removal after creation of a second card
       const activeCardId = clientData.activeCardId;
       assert(activeCardId, 'Selected a card');
@@ -171,7 +171,7 @@ const tests = [
       assert(clientData.deck.cards[1] === activeCardId, 'Updates active card to new card');
       assert(clientData.deck.cards[0] !== activeCardId, 'has a distinct id');
       assert(clientData.cardBody[activeCardId], 'Created a card body');
-      const serverData = server_data;
+      const serverData = (await getUserServerData(page));
       assert.equal(serverData.deck[0].cards, clientData.deck.cards, 'Deck cards match up with server cards');
       const cardBodyOnServer = serverData.cardBody.find(cb => cb.id === activeCardId);
       assert.ok(cardBodyOnServer, 'cardBody matches up with server cardBody');
@@ -181,20 +181,20 @@ const tests = [
   {
     n: "Card Removal & subsequent creation",
     t: async (page) => {
-      AP.click('#remove-card-button-active');
-      let clientData = wait_for_save;
+      await page.click('#remove-card-button-active');
+      let clientData = (await waitForChangesToSave(page));
       //We allow removal after creation of a second card
       const activeCardId = clientData.activeCardId;
       assert(activeCardId, 'Selected a card');
       assert(clientData.deck.cards.length === 1, 'Now there are less cards in the deck');
       assert(clientData.deck.cards[0] === activeCardId, 'Selected previous card');
-      let serverData = server_data;
+      let serverData = (await getUserServerData(page));
       assert(serverData.deck[0].cards === clientData.deck.cards, 'Deck cards match up with server cards');
       assert(serverData.cardBody.length === 1, 'Removed a cardbody correctly');
 
-      AP.click('#add-card');
-      clientData = wait_for_save;
-      serverData = server_data;
+      await page.click('#add-card');
+      clientData = (await waitForChangesToSave(page));
+      serverData = (await getUserServerData(page));
       assert(clientData.deck.cards.length === 2, 'Now there are more cards in the deck');
       assert(clientData.deck.cards[1] === String.fromCharCode(1), 'reclaimed open ID');
       assert(clientData.deck.cards[1] === String.fromCharCode(1), 'reclaimed open ID');
@@ -204,15 +204,15 @@ const tests = [
   {
     n: "Edit cards + image",
     t: async (page) => {
-      AP.focus('.pell-content');
-      AP.keyboard.type('Hello!');
-      APC('#flip-card');
-      AP.focus('.pell-content');
-      AP.keyboard.type('Sailor!');
-      const input = AP.$('#image-upload');
+      await page.focus('.pell-content');
+      await page.keyboard.type('Hello!');
+      await wclick(page, '#flip-card');
+      await page.focus('.pell-content');
+      await page.keyboard.type('Sailor!');
+      const input = await page.$('#image-upload');
       await input.uploadFile('./test-image.png');
-      let clientData = wait_for_save;
-      let serverData =  server_data;
+      let clientData = (await waitForChangesToSave(page));
+      let serverData =  (await getUserServerData(page));
       let activeId = clientData.activeCardId;
       let cardBody = serverData.cardBody.find(cb => cb.id === activeId);
       assert(cardBody.backHasImage);
@@ -221,17 +221,17 @@ const tests = [
       assert(cardBody.front.indexOf('Hello!') !== -1);
       assert(!cardBody.frontHasImage);
       assert(!cardBody.frontImage);
-      AP.click('#image-spot');
-      AP.waitForSelector('#popup-image');
-      AP.click('.popup');
-      AP.waitFor(() => !document.querySelector("#overlay"));
-      AP.click('#flip-card');
-      AP.waitForSelector('.image-spot-without-image');
-      AP.click('#flip-card');
-      AP.waitForSelector('#remove-image-from-card');
-      AP.click('#remove-image-from-card');
-      wait_for_save;
-      serverData = server_data;
+      await page.click('#image-spot');
+      await page.waitForSelector('#popup-image');
+      await page.click('.popup');
+      await page.waitFor(() => !document.querySelector("#overlay"));
+      await page.click('#flip-card');
+      await page.waitForSelector('.image-spot-without-image');
+      await page.click('#flip-card');
+      await page.waitForSelector('#remove-image-from-card');
+      await page.click('#remove-image-from-card');
+      (await waitForChangesToSave(page));
+      serverData = (await getUserServerData(page));
       cardBody = serverData.cardBody.find(cb => cb.id === activeId)
       // //Removed image
       assert(!cardBody.backHasImage);
@@ -240,19 +240,19 @@ const tests = [
   }, {
     n: "Study cards",
     t: async (page) => {
-      AP.click('#no-study-session-creation-button');
-      APC('#flip-card-study');
-      APC('#right-button');
-      wait_for_save;
-      AP.click('#flip-card-study');
-      APC('#wrong-button');
+      await page.click('#no-study-session-creation-button');
+      await wclick(page, '#flip-card-study');
+      await wclick(page, '#right-button');
+      (await waitForChangesToSave(page));
+      await page.click('#flip-card-study');
+      await wclick(page, '#wrong-button');
       //restudy the wrong answers
-      APC('#restudy-button');
-      wait_for_save;
-      APC('#flip-card-study');
-      APC('#right-button');
+      await wclick(page, '#restudy-button');
+      (await waitForChangesToSave(page));
+      await wclick(page, '#flip-card-study');
+      await wclick(page, '#right-button');
       //finish study session
-      APC('#finish-studying');
+      await wclick(page, '#finish-studying');
     },
   },
     //
@@ -260,37 +260,37 @@ const tests = [
     n: "Deck sharing",
     t: async (page) => {
       //Share deck
-      APC('.deck-edit-button');
+      await wclick(page, '.deck-edit-button');
       await clickAndWaitOnDialog(page, '#share-deck-button');
       //Now sharable
-      wait_for_save;
-      AP.waitForSelector('#copy-sharable-link');
+      (await waitForChangesToSave(page));
+      await page.waitForSelector('#copy-sharable-link');
     },
   },
   {
     n: "Logout",
     t: async (page) => {
-      APC('#logout-link');
+      await wclick(page, '#logout-link');
     }
   },
   {
     n: "Public deck viewable by another",
     t: async (page) => {
       //Create another user
-      APC('#login-button');
-      APC('#signup-button');
-      AP.waitForSelector('#display-name');
-      AP.type('#email', email + '1');
-      AP.type('#password', password);
-      AP.type('#password-repeat', password);
-      AP.type('#display-name', 'foo2');
-      AP.click('#signup-button');
-      AP.waitForNavigation();
+      await wclick(page, '#login-button');
+      await wclick(page, '#signup-button');
+      await page.waitForSelector('#display-name');
+      await page.type('#email', email + '1');
+      await page.type('#password', password);
+      await page.type('#password-repeat', password);
+      await page.type('#display-name', 'foo2');
+      await page.click('#signup-button');
+      await page.waitForNavigation();
       //Try to view shareable link
       const deckId = lastSeenClientData.deck.id;
-      AP.goto(`http://localhost:3000/site/me/study?deck=${deckId}&upsert=true`);
+      await page.goto(`http://localhost:3000/site/me/study?deck=${deckId}&upsert=true`);
       // On page
-      AP.waitForSelector('#end-session-link');
+      await page.waitForSelector('#end-session-link');
       const data = await getClientData(page);
       assert(data.deck.id === deckId);
       assert(data.deck.cards.length === 2);

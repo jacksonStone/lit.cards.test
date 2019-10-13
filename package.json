@@ -4,8 +4,9 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "node ./happy-path.test.js",
-    "test-keep-open": "DO_NOT_CLOSE=true node ./happy-path.test.js"
+    "test": "npm run compc && node ./build/happy-path.test.js",
+    "test-keep-open": "npm run compc && DO_NOT_CLOSE=true node ./buildhappy-path.test.js",
+    "compc": "clang++ -o build/main findAndReplace.cpp && ./build/main"
   },
   "author": "",
   "license": "ISC",
