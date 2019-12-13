@@ -32,7 +32,7 @@ puppeteer.launch(closeWhenDone ? {headless: true} : {headless: false}).then(asyn
   await resetServerData(page);
   
   
-
+  const now = Date.now();
   for(let i = 0; i < tests.length; i++) {
     let testConfig = tests[i];
     console.log("Running Test: ", testConfig.n);
@@ -44,6 +44,8 @@ puppeteer.launch(closeWhenDone ? {headless: true} : {headless: false}).then(asyn
       break;
     }
   }
+  const then = Date.now();
+  console.log(`Tests took: ${(then - now)/1000} seconds`);
   if (closeWhenDone) {
     await browser.close();
   }
@@ -62,7 +64,6 @@ async function getUserServerData(page) {
   
   return page.evaluate(async function(userId) {
     const val = await window.lc.getServerDBState(userId);
-    console.log(val);
     return val;
   }, email);
 }
@@ -70,7 +71,11 @@ let lastSeenClientData;
 async function getClientData(page) {
   
   lastSeenClientData = await page.evaluate(async function() {
-    return window.lc.data;
+    const clientData =  window.lc.data;
+    if(!clientData.saving && !clientData.fileUploading && (!clientData.changes || Object.keys(clientData.changes).length === 0)) {
+      console.log("Thinks no save left");
+    }
+    return  clientData;
   });
   return lastSeenClientData;
 }
@@ -83,7 +88,7 @@ async function waitForChangesToSave(page) {
   const waitTimePerCheck = 100;
   for(let i = 0; i < checks; i++) {
     const clientData = await getClientData(page);
-    if(!clientData.changes || Object.keys(clientData.changes).length === 0) {
+    if(!clientData.saving && !clientData.fileUploading && (!clientData.changes || Object.keys(clientData.changes).length === 0)) {
       return clientData;
     }
     await new Promise(resolve => {
@@ -237,7 +242,8 @@ const tests = [
       assert(!cardBody.backHasImage);
       assert(!cardBody.backImage);
     },
-  }, {
+  },
+  {
     n: "Study cards",
     t: async (page) => {
       await page.click('#no-study-session-creation-button');

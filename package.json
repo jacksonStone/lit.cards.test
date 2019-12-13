@@ -5,7 +5,7 @@
   "main": "index.js",
   "scripts": {
     "test": "npm run compc && node ./build/happy-path.test.js",
-    "test-keep-open": "npm run compc && DO_NOT_CLOSE=true node ./buildhappy-path.test.js",
+    "test-keep-open": "npm run compc && DO_NOT_CLOSE=true node ./build/happy-path.test.js",
     "compc": "clang++ -o build/main findAndReplace.cpp && ./build/main"
   },
   "author": "",

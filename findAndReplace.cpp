@@ -69,11 +69,13 @@ static void writeFileContents(STRING outputPath, char * contents) {
 }
 
 int main() {
-    double startTime = getCurrentMicroseconds();
+    // double startTime = getCurrentMicroseconds();
 
     recordMacroLengths();
     char* contents = getFileContents("./happy-path.test.js");
+    // double finishedTime = getCurrentMicroseconds();
     //Plenty of padding
+    double startTime = getCurrentMicroseconds();
     int startingLength = strlen(contents);
     int remainingContentLen = startingLength;
     char newContents[startingLength*2];
@@ -147,9 +149,9 @@ int main() {
     }
 
     newContents[contentMarker] = 0;
+    double finishedTime = getCurrentMicroseconds();
 
     writeFileContents("./build/happy-path.test.js", newContents);
-    double finishedTime = getCurrentMicroseconds();
 
     printf("Microseconds: %5.0f\n", (finishedTime - startTime));
 
