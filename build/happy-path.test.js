@@ -33,8 +33,7 @@ puppeteer.launch(closeWhenDone ? {headless: true} : {headless: false}).then(asyn
   
   
   const now = Date.now();
-  for(let i = 0; i < tests.length; i++) {
-    let testConfig = tests[i];
+  for(let testConfig of tests) {
     console.log("Running Test: ", testConfig.n);
     try {
       await testConfig.t(page);
@@ -96,6 +95,24 @@ async function waitForChangesToSave(page) {
     });
   }
   assert(false, 'Timed out on changes');
+}
+async function waitForChangesToSaveFast(page) {
+  const checks = 5;
+  const waitTimePerCheck = 100;
+  for(let i = 0; i < checks; i++) {
+    const done = await page.evaluate(function() {
+      const clientData =  window.lc.data;
+      if(!clientData.saving && !clientData.fileUploading && (!clientData.changes || Object.keys(clientData.changes).length === 0)) {
+        return true;
+      }
+      return  false;
+    });
+    if (done) return true;
+    await new Promise(resolve => {
+      setTimeout(resolve, waitTimePerCheck);
+    });
+  }
+  assert(false, 'Save took too long by my standards');
 }
 async function clickAndWaitOnDialog(page, id) {
   let once;
@@ -235,7 +252,7 @@ const tests = [
       await page.click('#flip-card');
       await page.waitForSelector('#remove-image-from-card');
       await page.click('#remove-image-from-card');
-      (await waitForChangesToSave(page));
+      await waitForChangesToSaveFast(page);
       serverData = (await getUserServerData(page));
       cardBody = serverData.cardBody.find(cb => cb.id === activeId)
       
@@ -249,12 +266,12 @@ const tests = [
       await page.click('#no-study-session-creation-button');
       await wclick(page, '#flip-card-study');
       await wclick(page, '#right-button');
-      (await waitForChangesToSave(page));
+      await waitForChangesToSaveFast(page);
       await page.click('#flip-card-study');
       await wclick(page, '#wrong-button');
       
       await wclick(page, '#restudy-button');
-      (await waitForChangesToSave(page));
+      await waitForChangesToSaveFast(page);
       await wclick(page, '#flip-card-study');
       await wclick(page, '#right-button');
       
@@ -269,7 +286,7 @@ const tests = [
       await wclick(page, '.deck-edit-button');
       await clickAndWaitOnDialog(page, '#share-deck-button');
       
-      (await waitForChangesToSave(page));
+      await waitForChangesToSaveFast(page);
       await page.waitForSelector('#copy-sharable-link');
     },
   },
@@ -305,4 +322,119 @@ const tests = [
 
     },
   },
+];
+
+testUnderLoad = [
+{
+  n: "Signup Flow",
+  t: async (page) => {
+    
+    await page.goto('http://localhost:3000/site/login');
+    
+    await page.waitForSelector('#email');
+    
+    await page.click('#signup-button');
+
+    await page.waitForSelector('#display-name');
+    await page.type('#email', email);
+    await page.type('#password', password);
+    await page.type('#password-repeat', password);
+    await page.type('#display-name', 'foo');
+    
+    await page.click('#signup-button');
+    await page.waitForNavigation();
+    assert(page.url() === 'http://localhost:3000/site/me', 'failed to navigate to home');
+  }
+},
+{
+  n: "Authenticate Email",
+  t: async (page) => {
+    await page.waitForSelector('#email-verification-bar');
+    const data = (await getUserServerData(page));
+    const emailBody = data.emails[0].text;
+    const url = emailBody.substring(emailBody.indexOf('http:'));
+    await page.goto(url);
+    await page.waitForSelector('#email-verified');
+    assert(true, 'Verified email as expected');
+  },
+},
+{
+  n: "Deck Creation",
+  t: async (page) => {
+    await page.click('#add-deck-card');
+    
+    await page.waitForSelector('#remove-card-button-inactive');
+    const clientData = (await waitForChangesToSave(page));
+    const activeCardId = clientData.activeCardId;
+    assert(activeCardId, 'Selected a card');
+    assert(clientData.deck.cards.length === 1, 'is the only card in the deck');
+    assert(clientData.deck.cards === activeCardId, 'is the only card in the deck');
+    assert(clientData.cardBody[activeCardId], 'Created a card body');
+
+  },
+},
+{
+  n: "Card Creation",
+  t: async (page) => {
+    await page.click('#add-card');
+    await wclick(page, '#remove-card-button-active');
+    await page.click('#add-card');
+    
+    const clientData = (await waitForChangesToSave(page));
+    
+    const activeCardId = clientData.activeCardId;
+    assert(activeCardId, 'Selected a card');
+    assert(clientData.deck.cards.length === 2, 'Now there are more cards in the deck');
+    assert(clientData.deck.cards[1] === activeCardId, 'Updates active card to new card');
+    assert(clientData.deck.cards[0] !== activeCardId, 'has a distinct id');
+    assert(clientData.cardBody[activeCardId], 'Created a card body');
+    const serverData = (await getUserServerData(page));
+    assert.equal(serverData.deck[0].cards, clientData.deck.cards, 'Deck cards match up with server cards');
+    const cardBodyOnServer = serverData.cardBody.find(cb => cb.id === activeCardId);
+    assert.ok(cardBodyOnServer, 'cardBody matches up with server cardBody');
+    assert(serverData.cardBody.length === 2, 'Made a card body for each new card');
+  },
+},
+{
+  n: "Card Removal & subsequent creation",
+  t: async (page) => {
+    await page.click('#remove-card-button-active');
+    let clientData = (await waitForChangesToSave(page));
+    
+    const activeCardId = clientData.activeCardId;
+    assert(activeCardId, 'Selected a card');
+    assert(clientData.deck.cards.length === 1, 'Now there are less cards in the deck');
+    assert(clientData.deck.cards[0] === activeCardId, 'Selected previous card');
+    let serverData = (await getUserServerData(page));
+    assert(serverData.deck[0].cards === clientData.deck.cards, 'Deck cards match up with server cards');
+    assert(serverData.cardBody.length === 1, 'Removed a cardbody correctly');
+
+    await page.click('#add-card');
+    clientData = (await waitForChangesToSave(page));
+    serverData = (await getUserServerData(page));
+    assert(clientData.deck.cards.length === 2, 'Now there are more cards in the deck');
+    assert(clientData.deck.cards[1] === String.fromCharCode(1), 'reclaimed open ID');
+    assert(clientData.deck.cards[1] === String.fromCharCode(1), 'reclaimed open ID');
+    assert.equal(serverData.deck[0].cards, clientData.deck.cards, 'Deck cards match up with server cards');
+  },
+},
+{
+  n: "Edit cards + image 2000",
+  t: async (page) => {
+    for(let i = 0; i < 2000; i++) {
+      await page.focus('.pell-content');
+      await page.keyboard.type('Hello!' + i);
+      let input = await page.$('#image-upload');
+      await input.uploadFile('./test-image.png');
+      await waitForChangesToSaveFast(page);
+      await wclick(page, '#flip-card');
+      await page.focus('.pell-content');
+      await page.keyboard.type('Sailor!' + i);
+      input = await page.$('#image-upload');
+      await input.uploadFile('./test-image.png');
+      await page.click('#add-card');
+      await waitForChangesToSaveFast(page);
+    }
+  },
+},
 ];

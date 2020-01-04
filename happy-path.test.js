@@ -33,8 +33,7 @@ puppeteer.launch(closeWhenDone ? {headless: true} : {headless: false}).then(asyn
   //Second load should be much quicker
   // page.setDefaultTimeout(200);
   const now = Date.now();
-  for(let i = 0; i < tests.length; i++) {
-    let testConfig = tests[i];
+  for(let testConfig of tests) {
     console.log("Running Test: ", testConfig.n);
     try {
       await testConfig.t(page);
@@ -96,6 +95,24 @@ async function waitForChangesToSave(page) {
     });
   }
   assert(false, 'Timed out on changes');
+}
+async function waitForChangesToSaveFast(page) {
+  const checks = 5;
+  const waitTimePerCheck = 100;
+  for(let i = 0; i < checks; i++) {
+    const done = AP.evaluate(function() {
+      const clientData =  window.lc.data;
+      if(!clientData.saving && !clientData.fileUploading && (!clientData.changes || Object.keys(clientData.changes).length === 0)) {
+        return true;
+      }
+      return  false;
+    });
+    if (done) return true;
+    await new Promise(resolve => {
+      setTimeout(resolve, waitTimePerCheck);
+    });
+  }
+  assert(false, 'Save took too long by my standards');
 }
 async function clickAndWaitOnDialog(page, id) {
   let once;
@@ -235,7 +252,7 @@ const tests = [
       AP.click('#flip-card');
       AP.waitForSelector('#remove-image-from-card');
       AP.click('#remove-image-from-card');
-      wait_for_save;
+      await waitForChangesToSaveFast(page);
       serverData = server_data;
       cardBody = serverData.cardBody.find(cb => cb.id === activeId)
       // //Removed image
@@ -249,12 +266,12 @@ const tests = [
       AP.click('#no-study-session-creation-button');
       APC('#flip-card-study');
       APC('#right-button');
-      wait_for_save;
+      await waitForChangesToSaveFast(page);
       AP.click('#flip-card-study');
       APC('#wrong-button');
       //restudy the wrong answers
       APC('#restudy-button');
-      wait_for_save;
+      await waitForChangesToSaveFast(page);
       APC('#flip-card-study');
       APC('#right-button');
       //finish study session
@@ -269,7 +286,7 @@ const tests = [
       APC('.deck-edit-button');
       await clickAndWaitOnDialog(page, '#share-deck-button');
       //Now sharable
-      wait_for_save;
+      await waitForChangesToSaveFast(page);
       AP.waitForSelector('#copy-sharable-link');
     },
   },
@@ -305,4 +322,119 @@ const tests = [
 
     },
   },
+];
+
+testUnderLoad = [
+{
+  n: "Signup Flow",
+  t: async (page) => {
+    //Begin on login page
+    AP.goto('http://localhost:3000/site/login');
+    //Page render
+    AP.waitForSelector('#email');
+    //Navigate to signup page
+    AP.click('#signup-button');
+
+    AP.waitForSelector('#display-name');
+    AP.type('#email', email);
+    AP.type('#password', password);
+    AP.type('#password-repeat', password);
+    AP.type('#display-name', 'foo');
+    //Complete signup
+    AP.click('#signup-button');
+    AP.waitForNavigation();
+    assert(page.url() === 'http://localhost:3000/site/me', 'failed to navigate to home');
+  }
+},
+{
+  n: "Authenticate Email",
+  t: async (page) => {
+    AP.waitForSelector('#email-verification-bar');
+    const data = server_data;
+    const emailBody = data.emails[0].text;
+    const url = emailBody.substring(emailBody.indexOf('http:'));
+    AP.goto(url);
+    AP.waitForSelector('#email-verified');
+    assert(true, 'Verified email as expected');
+  },
+},
+{
+  n: "Deck Creation",
+  t: async (page) => {
+    AP.click('#add-deck-card');
+    //We do not allow card removal for the only card
+    AP.waitForSelector('#remove-card-button-inactive');
+    const clientData = wait_for_save;
+    const activeCardId = clientData.activeCardId;
+    assert(activeCardId, 'Selected a card');
+    assert(clientData.deck.cards.length === 1, 'is the only card in the deck');
+    assert(clientData.deck.cards === activeCardId, 'is the only card in the deck');
+    assert(clientData.cardBody[activeCardId], 'Created a card body');
+
+  },
+},
+{
+  n: "Card Creation",
+  t: async (page) => {
+    AP.click('#add-card');
+    APC('#remove-card-button-active');
+    AP.click('#add-card');
+    // Making it messy
+    const clientData = wait_for_save;
+    //We allow removal after creation of a second card
+    const activeCardId = clientData.activeCardId;
+    assert(activeCardId, 'Selected a card');
+    assert(clientData.deck.cards.length === 2, 'Now there are more cards in the deck');
+    assert(clientData.deck.cards[1] === activeCardId, 'Updates active card to new card');
+    assert(clientData.deck.cards[0] !== activeCardId, 'has a distinct id');
+    assert(clientData.cardBody[activeCardId], 'Created a card body');
+    const serverData = server_data;
+    assert.equal(serverData.deck[0].cards, clientData.deck.cards, 'Deck cards match up with server cards');
+    const cardBodyOnServer = serverData.cardBody.find(cb => cb.id === activeCardId);
+    assert.ok(cardBodyOnServer, 'cardBody matches up with server cardBody');
+    assert(serverData.cardBody.length === 2, 'Made a card body for each new card');
+  },
+},
+{
+  n: "Card Removal & subsequent creation",
+  t: async (page) => {
+    AP.click('#remove-card-button-active');
+    let clientData = wait_for_save;
+    //We allow removal after creation of a second card
+    const activeCardId = clientData.activeCardId;
+    assert(activeCardId, 'Selected a card');
+    assert(clientData.deck.cards.length === 1, 'Now there are less cards in the deck');
+    assert(clientData.deck.cards[0] === activeCardId, 'Selected previous card');
+    let serverData = server_data;
+    assert(serverData.deck[0].cards === clientData.deck.cards, 'Deck cards match up with server cards');
+    assert(serverData.cardBody.length === 1, 'Removed a cardbody correctly');
+
+    AP.click('#add-card');
+    clientData = wait_for_save;
+    serverData = server_data;
+    assert(clientData.deck.cards.length === 2, 'Now there are more cards in the deck');
+    assert(clientData.deck.cards[1] === String.fromCharCode(1), 'reclaimed open ID');
+    assert(clientData.deck.cards[1] === String.fromCharCode(1), 'reclaimed open ID');
+    assert.equal(serverData.deck[0].cards, clientData.deck.cards, 'Deck cards match up with server cards');
+  },
+},
+{
+  n: "Edit cards + image 2000",
+  t: async (page) => {
+    for(let i = 0; i < 2000; i++) {
+      AP.focus('.pell-content');
+      AP.keyboard.type('Hello!' + i);
+      let input = AP.$('#image-upload');
+      await input.uploadFile('./test-image.png');
+      await waitForChangesToSaveFast(page);
+      APC('#flip-card');
+      AP.focus('.pell-content');
+      AP.keyboard.type('Sailor!' + i);
+      input = AP.$('#image-upload');
+      await input.uploadFile('./test-image.png');
+      AP.click('#add-card');
+      await waitForChangesToSaveFast(page);
+    }
+  },
+},
 ];
