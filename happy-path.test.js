@@ -7,7 +7,7 @@ const assert = require('assert');
 
 const email = 'foo@email.com';
 const password = '123456';
-
+const TEST_PAGE = 'http://localhost:3000/'
 const closeWhenDone = !process.env.DO_NOT_CLOSE;
 console.log("Keep open: ", !closeWhenDone);
 
@@ -23,9 +23,9 @@ puppeteer.launch(closeWhenDone ? {headless: true} : {headless: false}).then(asyn
   //Begin on home page
 
   //Keep initial load fast
-  page.setDefaultTimeout(1000);
+  page.setDefaultTimeout(2000);
 
-  AP.goto('http://localhost:3000/');
+  AP.goto(TEST_PAGE);
   //Page render
   AP.waitForSelector('#app-header');
 
@@ -134,7 +134,7 @@ const tests = [
     n: "Signup Flow",
     t: async (page) => {
       //Begin on login page
-      AP.goto('http://localhost:3000/site/login');
+      AP.goto(`${TEST_PAGE}site/login`);
       //Page render
       AP.waitForSelector('#email');
       //Navigate to signup page
@@ -148,7 +148,7 @@ const tests = [
       //Complete signup
       AP.click('#signup-button');
       AP.waitForNavigation();
-      assert(page.url() === 'http://localhost:3000/site/me', 'failed to navigate to home');
+      assert(page.url() === TEST_PAGE+'site/me', 'failed to navigate to home');
     }
   },
   {
@@ -311,7 +311,7 @@ const tests = [
       AP.waitForNavigation();
       //Try to view shareable link
       const deckId = lastSeenClientData.deck.id;
-      AP.goto(`http://localhost:3000/site/me/study?deck=${deckId}&upsert=true`);
+      AP.goto(`${TEST_PAGE}site/me/study?deck=${deckId}&upsert=true`);
       // On page
       AP.waitForSelector('#end-session-link');
       const data = await getClientData(page);

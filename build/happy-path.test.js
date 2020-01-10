@@ -7,7 +7,7 @@ const assert = require('assert');
 
 const email = 'foo@email.com';
 const password = '123456';
-
+const TEST_PAGE = 'http://localhost:3000/'
 const closeWhenDone = !process.env.DO_NOT_CLOSE;
 console.log("Keep open: ", !closeWhenDone);
 
@@ -23,9 +23,9 @@ puppeteer.launch(closeWhenDone ? {headless: true} : {headless: false}).then(asyn
   
 
   
-  page.setDefaultTimeout(1000);
+  page.setDefaultTimeout(2000);
 
-  await page.goto('http://localhost:3000/');
+  await page.goto(TEST_PAGE);
   
   await page.waitForSelector('#app-header');
 
@@ -134,7 +134,7 @@ const tests = [
     n: "Signup Flow",
     t: async (page) => {
       
-      await page.goto('http://localhost:3000/site/login');
+      await page.goto(`${TEST_PAGE}site/login`);
       
       await page.waitForSelector('#email');
       
@@ -148,7 +148,7 @@ const tests = [
       
       await page.click('#signup-button');
       await page.waitForNavigation();
-      assert(page.url() === 'http://localhost:3000/site/me', 'failed to navigate to home');
+      assert(page.url() === TEST_PAGE+'site/me', 'failed to navigate to home');
     }
   },
   {
@@ -311,7 +311,7 @@ const tests = [
       await page.waitForNavigation();
       
       const deckId = lastSeenClientData.deck.id;
-      await page.goto(`http://localhost:3000/site/me/study?deck=${deckId}&upsert=true`);
+      await page.goto(`${TEST_PAGE}site/me/study?deck=${deckId}&upsert=true`);
       
       await page.waitForSelector('#end-session-link');
       const data = await getClientData(page);
